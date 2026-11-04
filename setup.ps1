@@ -6,6 +6,7 @@
 #   - Visual C++ Redistributable, Git, Node.js LTS, VS Code (instalatzaile ofizialak, winget gabe)
 #   - PHP 8.5 NTS x64 (windows.php.net) -> C:\Tools\php, php.ini Laravelerako
 #   - Composer -> C:\Tools\composer
+#   - Espainiako teklatua (oraingo erabiltzailea, ongietorri-pantaila eta erabiltzaile berriak)
 #   - Cheatsheet-a mahaigain publikoan (C:\Users\Public\Desktop)
 
 $ErrorActionPreference = 'Stop'
@@ -99,6 +100,34 @@ New-Item -ItemType Directory -Force -Path $ComposerDir | Out-Null
 Invoke-WebRequest -Uri 'https://getcomposer.org/download/latest-stable/composer.phar' -OutFile "$ComposerDir\composer.phar"
 Set-Content -Path "$ComposerDir\composer.bat" -Value '@php "%~dp0composer.phar" %*' -Encoding ASCII
 Add-MachinePath $ComposerDir
+
+Step 'Teklatua: Espainiakoa (es-ES), erabiltzaile guztientzat'
+$spanishKeyboard = '040A:0000040A'
+$languages = Get-WinUserLanguageList
+$spanish = $languages | Where-Object { $_.LanguageTag -eq 'es-ES' }
+if (-not $spanish) {
+    $languages.Insert(0, 'es-ES')
+    $spanish = $languages[0]
+}
+if ($spanish.InputMethodTips -notcontains $spanishKeyboard) { $spanish.InputMethodTips.Add($spanishKeyboard) }
+# Other keyboards (en-US...) are removed so students cannot switch by accident with Win+Space.
+foreach ($language in $languages) {
+    foreach ($tip in @($language.InputMethodTips)) {
+        if ($tip -ne $spanishKeyboard) { [void]$language.InputMethodTips.Remove($tip) }
+    }
+}
+Set-WinUserLanguageList $languages -Force
+Set-WinDefaultInputMethodOverride -InputTip $spanishKeyboard
+if (Get-Command Copy-UserInternationalSettingsToSystem -ErrorAction SilentlyContinue) {
+    Copy-UserInternationalSettingsToSystem -WelcomeScreen $true -NewUser $true
+} else {
+    # Older Windows: default for the welcome screen and for new profiles via the registry.
+    Set-ItemProperty -Path 'Registry::HKEY_USERS\.DEFAULT\Keyboard Layout\Preload' -Name '1' -Value '0000040a'
+    reg load HKU\ZiwgDefault C:\Users\Default\NTUSER.DAT | Out-Null
+    reg add 'HKU\ZiwgDefault\Keyboard Layout\Preload' /v 1 /t REG_SZ /d 0000040a /f | Out-Null
+    [GC]::Collect()
+    reg unload HKU\ZiwgDefault | Out-Null
+}
 
 Step 'Cheatsheet-a mahaigainean'
 Invoke-WebRequest -Uri "$RepoRaw/ZIWG-CheatSheet-Laravel.pdf" -OutFile "$PublicDesktop\ZIWG CheatSheet - Laravel (1. ebaluazioa).pdf"
