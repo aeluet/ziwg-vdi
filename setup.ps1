@@ -3,7 +3,7 @@
 #   irm https://raw.githubusercontent.com/aeluet/ziwg-vdi/main/setup.ps1 | iex
 #
 # Instalatzen du (makina osorako, erabiltzaile guztientzat):
-#   - Visual C++ Redistributable, Git, Node.js LTS, VS Code (winget)
+#   - Visual C++ Redistributable, Git, Node.js LTS, VS Code (instalatzaile ofizialak, winget gabe)
 #   - PHP 8.5 NTS x64 (windows.php.net) -> C:\Tools\php, php.ini Laravelerako
 #   - Composer -> C:\Tools\composer
 #   - Cheatsheet-a mahaigain publikoan (C:\Users\Public\Desktop)
@@ -41,26 +41,34 @@ function Add-MachinePath($dir) {
     Refresh-Path
 }
 
-function Install-Winget($id) {
-    Write-Host "   $id"
-    winget install --id $id --exact --source winget --silent --scope machine --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
-    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne -1978335189) {
-        # -1978335189 = already installed. Some packages have no machine scope: retry without it.
-        winget install --id $id --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
+function Install-Download($name, $url, $file, $arguments) {
+    Write-Host "   $name"
+    $path = "$env:TEMP\$file"
+    Invoke-WebRequest -Uri $url -OutFile $path -UserAgent 'Mozilla/5.0'
+    if ($file -like '*.msi') {
+        $process = Start-Process msiexec.exe -ArgumentList "/i `"$path`" $arguments" -Wait -PassThru
+    } else {
+        $process = Start-Process $path -ArgumentList $arguments -Wait -PassThru
+    }
+    Remove-Item $path -ErrorAction SilentlyContinue
+    # 3010 = success, reboot required; 1638 = a newer version is already installed.
+    if ($process.ExitCode -notin 0, 3010, 1638) {
+        Write-Host "   $name instalatzaileak $($process.ExitCode) kodea itzuli du" -ForegroundColor Yellow
     }
 }
 
-Step 'winget paketeak: VC++ Redistributable, Git, Node.js LTS, VS Code'
-if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-    Write-Host 'winget ez dago eskuragarri. Instalatu "App Installer" Microsoft Store-etik eta berriro exekutatu.' -ForegroundColor Red
-    Stop-Transcript | Out-Null
-    return
-}
-# The msstore source fails on machines without Store access: only the winget source is used.
-winget source update --name winget | Out-Host
-foreach ($id in 'Microsoft.VCRedist.2015+.x64', 'Git.Git', 'OpenJS.NodeJS.LTS', 'Microsoft.VisualStudioCode') {
-    Install-Winget $id
-}
+Step 'Instalatzaile ofizialak: VC++ Redistributable, Git, Node.js LTS, VS Code'
+Install-Download 'Visual C++ Redistributable' 'https://aka.ms/vs/17/release/vc_redist.x64.exe' 'vc_redist.x64.exe' '/install /quiet /norestart'
+
+$gitRelease = Invoke-RestMethod -Uri 'https://api.github.com/repos/git-for-windows/git/releases/latest' -UserAgent 'Mozilla/5.0'
+$gitAsset = $gitRelease.assets | Where-Object { $_.name -match '^Git-[\d.]+-64-bit\.exe$' } | Select-Object -First 1
+Install-Download "Git ($($gitAsset.name))" $gitAsset.browser_download_url $gitAsset.name '/VERYSILENT /NORESTART /NOCANCEL /SP- /SUPPRESSMSGBOXES'
+
+$nodeLts = (Invoke-RestMethod -Uri 'https://nodejs.org/dist/index.json') | Where-Object { $_.lts } | Select-Object -First 1
+$nodeMsi = "node-$($nodeLts.version)-x64.msi"
+Install-Download "Node.js $($nodeLts.version)" "https://nodejs.org/dist/$($nodeLts.version)/$nodeMsi" $nodeMsi '/qn /norestart'
+
+Install-Download 'VS Code' 'https://update.code.visualstudio.com/latest/win32-x64/stable' 'VSCodeSetup-x64.exe' '/VERYSILENT /NORESTART /MERGETASKS=!runcode,addcontextmenufiles,addcontextmenufolders,addtopath'
 Refresh-Path
 
 Step 'PHP 8.5 (NTS x64)'
