@@ -43,10 +43,10 @@ function Add-MachinePath($dir) {
 
 function Install-Winget($id) {
     Write-Host "   $id"
-    winget install --id $id --exact --silent --scope machine --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
+    winget install --id $id --exact --source winget --silent --scope machine --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
     if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne -1978335189) {
         # -1978335189 = already installed. Some packages have no machine scope: retry without it.
-        winget install --id $id --exact --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
+        winget install --id $id --exact --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
     }
 }
 
@@ -56,6 +56,8 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Stop-Transcript | Out-Null
     return
 }
+# The msstore source fails on machines without Store access: only the winget source is used.
+winget source update --name winget | Out-Host
 foreach ($id in 'Microsoft.VCRedist.2015+.x64', 'Git.Git', 'OpenJS.NodeJS.LTS', 'Microsoft.VisualStudioCode') {
     Install-Winget $id
 }
