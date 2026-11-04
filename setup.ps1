@@ -113,13 +113,15 @@ echo $missing ? 'FALTA: ' . implode(', ', $missing) : 'OK';
 $checks = [ordered]@{
     'PHP'       = { php -v | Select-Object -First 1 }
     'Luzapenak' = { php $extCheck }
-    'Composer'  = { (composer --version --no-ansi) -replace '^Composer version (\S+).*', '$1' }
+    'Composer'  = { (composer --version --no-ansi | Select-String 'Composer version') -replace '^Composer version (\S+).*', '$1' }
     'Node'      = { node --version }
     'npm'       = { npm --version }
     'Git'       = { git --version }
     'VS Code'   = { (code --version)[0] }
 }
 $failed = $false
+# Composer and npm write notices to stderr; that must not count as a failure.
+$ErrorActionPreference = 'Continue'
 foreach ($name in $checks.Keys) {
     try {
         $result = & $checks[$name] 2>$null
